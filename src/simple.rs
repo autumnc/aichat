@@ -5,22 +5,23 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    style::{Color, Print, ResetColor, SetForegroundColor},
     terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
 };
 use std::io::{self, stdout, Write};
 use unicode_width::UnicodeWidthChar;
 
-const USER_COLOR: Color = Color::Cyan;
-const AI_COLOR: Color = Color::Green;
-const PROMPT_COLOR: Color = Color::Yellow;
+// fbterm-compatible ANSI 16-color codes
+const ANSI_RESET: &str = "\x1b[0m";
+const ANSI_CYAN: &str = "\x1b[36m";
+const ANSI_GREEN: &str = "\x1b[32m";
+const ANSI_YELLOW: &str = "\x1b[33m";
+const ANSI_GREY: &str = "\x1b[90m";
 
 pub async fn run_simple_mode(model: AIModel, language: Language) -> io::Result<()> {
     print_welcome(&model, language)?;
 
     let mut stdout = stdout();
-    // Record where input prompt starts (right after welcome banner)
-    execute!(stdout, SetForegroundColor(PROMPT_COLOR), Print("> "), SetForegroundColor(USER_COLOR))?;
+    write!(stdout, "{ANSI_YELLOW}> {ANSI_CYAN}")?;
     stdout.flush()?;
 
     enable_raw_mode()?;
@@ -33,20 +34,19 @@ pub async fn run_simple_mode(model: AIModel, language: Language) -> io::Result<(
             match key.code {
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     disable_raw_mode()?;
-                    execute!(stdout, ResetColor, Print("\r\n"))?;
-                    println!("Bye.");
+                    write!(stdout, "{ANSI_RESET}\r\nBye.\n")?;
                     return Ok(());
                 }
                 KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     if input_lines.is_empty() && current_line.is_empty() {
                         disable_raw_mode()?;
-                        execute!(stdout, ResetColor, Print("\r\n"))?;
+                        write!(stdout, "{ANSI_RESET}\r\n")?;
                         return Ok(());
                     }
                 }
                 KeyCode::Enter => {
                     if key.modifiers.contains(KeyModifiers::ALT) {
-                        execute!(stdout, Print("\r\n  "))?;
+                        write!(stdout, "\r\n  ")?;
                         input_lines.push(std::mem::take(&mut current_line));
                     } else {
                         let mut full_input = input_lines.join("\n");
@@ -57,13 +57,9 @@ pub async fn run_simple_mode(model: AIModel, language: Language) -> io::Result<(
 
                         if !full_input.trim().is_empty() {
                             disable_raw_mode()?;
-                            execute!(stdout, ResetColor, Print("\r\n"))?;
-                            execute!(
-                                stdout,
-                                SetForegroundColor(Color::DarkGrey),
-                                Print("...\r\n"),
-                                ResetColor,
-                            )?;
+                            write!(stdout, "{ANSI_RESET}\r\n")?;
+
+                            write!(stdout, "{ANSI_GREY}...\r\n{ANSI_RESET}")?;
                             stdout.flush()?;
 
                             let response = call_ai(&model, &full_input, language).await;
@@ -75,15 +71,15 @@ pub async fn run_simple_mode(model: AIModel, language: Language) -> io::Result<(
                             )?;
 
                             print_ai_response(&response)?;
-                            execute!(stdout, Print("\n"))?;
+                            write!(stdout, "\n")?;
 
-                            execute!(stdout, SetForegroundColor(PROMPT_COLOR), Print("> "), SetForegroundColor(USER_COLOR))?;
+                            write!(stdout, "{ANSI_YELLOW}> {ANSI_CYAN}")?;
                             stdout.flush()?;
 
                             enable_raw_mode()?;
                         } else {
-                            execute!(stdout, ResetColor, Print("\r\n"))?;
-                            execute!(stdout, SetForegroundColor(PROMPT_COLOR), Print("> "), SetForegroundColor(USER_COLOR))?;
+                            write!(stdout, "{ANSI_RESET}\r\n")?;
+                            write!(stdout, "{ANSI_YELLOW}> {ANSI_CYAN}")?;
                             stdout.flush()?;
                         }
                         input_lines.clear();
@@ -91,13 +87,11 @@ pub async fn run_simple_mode(model: AIModel, language: Language) -> io::Result<(
                     }
                 }
                 KeyCode::Backspace => {
-                    if !handle_backspace(&mut stdout, &mut input_lines, &mut current_line)? {
-                        // nothing to delete
-                    }
+                    if !handle_backspace(&mut stdout, &mut input_lines, &mut current_line)? {}
                 }
                 KeyCode::Char(c) => {
                     current_line.push(c);
-                    execute!(stdout, Print(c))?;
+                    write!(stdout, "{c}")?;
                 }
                 _ => {}
             }
@@ -125,7 +119,7 @@ fn handle_backspace(
         let width = char_width(ch) as u16;
         execute!(stdout, cursor::MoveLeft(width))?;
         for _ in 0..width {
-            execute!(stdout, Print(" "))?;
+            write!(stdout, " ")?;
         }
         execute!(stdout, cursor::MoveLeft(width))?;
     }
@@ -138,11 +132,11 @@ fn char_width(c: char) -> usize {
 
 fn print_ai_response(response: &str) -> io::Result<()> {
     let mut stdout = stdout();
-    execute!(stdout, SetForegroundColor(AI_COLOR))?;
+    write!(stdout, "{ANSI_GREEN}")?;
     for line in response.lines() {
-        execute!(stdout, Print(line), Print("\r\n"))?;
+        write!(stdout, "{line}\r\n")?;
     }
-    execute!(stdout, ResetColor)?;
+    write!(stdout, "{ANSI_RESET}")?;
     stdout.flush()?;
     Ok(())
 }
@@ -150,16 +144,7 @@ fn print_ai_response(response: &str) -> io::Result<()> {
 fn print_welcome(model: &AIModel, language: Language) -> io::Result<()> {
     let model_name = model.name(language);
     let mut stdout = stdout();
-    execute!(stdout, Print("\n"))?;
-    execute!(stdout, Print("  "), SetForegroundColor(Color::Cyan), Print("aichat --simple"), ResetColor, Print("  "))?;
-    execute!(stdout, SetForegroundColor(Color::Green), Print(&model_name), ResetColor, Print("  "))?;
-    execute!(
-        stdout,
-        SetForegroundColor(Color::DarkGrey),
-        Print("[Enter] send  [Alt+Enter] newline  [Ctrl+C] quit"),
-        ResetColor,
-        Print("\n\n"),
-    )?;
+    write!(stdout, "\n  {ANSI_CYAN}aichat --simple{ANSI_RESET}  {ANSI_GREEN}{model_name}{ANSI_RESET}  {ANSI_GREY}[Enter] send  [Alt+Enter] newline  [Ctrl+C] quit{ANSI_RESET}\n\n")?;
     stdout.flush()?;
     Ok(())
 }
