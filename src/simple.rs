@@ -37,7 +37,7 @@ pub async fn run_simple_mode(model: AIModel, language: Language) -> io::Result<(
     loop {
         if let Event::Key(key) = event::read()? {
             match key.code {
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Esc => {
                     disable_raw_mode()?;
                     write!(stdout, "{ANSI_RESET}\r\nBye.\n")?;
                     return Ok(());
@@ -348,7 +348,7 @@ fn emit_codes(out: &mut String, s: &StyleCounts) {
 fn print_welcome(model: &AIModel, language: Language) -> io::Result<()> {
     let model_name = model.name(language);
     let mut stdout = stdout();
-    write!(stdout, "\n  {ANSI_CYAN}aichat --simple{ANSI_RESET}  {ANSI_GREEN}{model_name}{ANSI_RESET}  {ANSI_GREY}[Enter] send  [Alt+Enter] newline  [Ctrl+C] quit{ANSI_RESET}\n\n")?;
+    write!(stdout, "{ANSI_GREEN}{model_name}{ANSI_RESET}  {ANSI_GREY}[Enter] send  [Alt+Enter] newline  [Esc] quit{ANSI_RESET}\n")?;
     stdout.flush()?;
     Ok(())
 }
