@@ -1,6 +1,7 @@
 mod ai;
 mod ai_models;
 mod app;
+mod config;
 mod events;
 mod i18n;
 mod simple;
